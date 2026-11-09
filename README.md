@@ -12,38 +12,7 @@
                             질의응답(법령·매뉴얼 RAG) · 서류 생성 → 승인 → 보관함
 ```
 
-## 아키텍처
-
-```
-                     ┌───────────────┐
-브라우저 ──────────► │ Caddy (:8081) │  경로 라우팅
-                     └───────┬───────┘
-                  ┌──────────┼──────────┐
-                  ▼          ▼          ▼
-            frontend      backend    /health/*
-          React + Vite  Spring Boot
-            (nginx)     Java 21 · :8080
-                            │  RestClient
-                            ▼
-                      ai · FastAPI + LangGraph · :8000
-                            │
-                            ▼
-                      PostgreSQL + pgvector
-```
-
-| 서비스 | 스택 | 역할 | 포트 |
-|---|---|---|---|
-| `frontend/` | React 18 · Vite 5 · React Router | 모바일 프레임 단일 페이지. 촬영 → 확인 → 과제 → 서류 흐름 | 5173 (dev) / 3000 (nginx) |
-| `backend/` | Java 21 · Spring Boot 3 · JPA | 회원·JWT 인증, S3 presigned 업로드, 생성 서류 영속화, AI 서비스 중계 | 8080 |
-| `ai/` | Python 3.12 · FastAPI · LangGraph | 에이전트 상태 기계, OCR 추출, 룰 엔진, RAG 질의응답, 서식 렌더 | 8000 |
-| `db` | pgvector/pgvector:pg16 | 회원·서류 테이블, LangGraph 체크포인트, `rag.chunk` 벡터 | 5432 |
-| `deploy/` | Caddy 2 | 리버스 프록시 (`/api/*` → backend, 그 외 → frontend) | 8081 |
-| `mock-institution/` | Python | 기관 API 시뮬레이터 (스켈레톤) | — |
-
-프론트는 개발 시 Vite 프록시로 `/api/v1/*` 를 Spring 에, 나머지 `/api/*` 를 AI 에 직접 보낸다.
-운영에서는 Caddy 가 `/api/*` 를 전부 backend 로 보내고 backend 가 AI 를 중계한다.
-
-## 빠른 시작
+## 실행 방법
 
 ### 전체 스택 (Docker)
 
@@ -84,284 +53,44 @@ API 스펙: AI http://localhost:8000/docs · Backend http://localhost:8080/swagg
 `JWT_SECRET` 은 32바이트 이상이어야 한다. 백엔드가 아직 없어도 프론트는 목데이터로 돈다 —
 `VITE_USE_MOCK=true npm run dev`.
 
-## 환경 변수
+## 아키텍처
 
-**ai** (`ai/.env.example`)
+```
+                     ┌───────────────┐
+브라우저 ──────────► │ Caddy (:8081) │  경로 라우팅
+                     └───────┬───────┘
+                  ┌──────────┼──────────┐
+                  ▼          ▼          ▼
+            frontend      backend    /health/*
+          React + Vite  Spring Boot
+            (nginx)     Java 21 · :8080
+                            │  RestClient
+                            ▼
+                      ai · FastAPI + LangGraph · :8000
+                            │
+                            ▼
+                      PostgreSQL + pgvector
+```
 
-| 키 | 없으면 |
+| 서비스 | 스택 | 역할 | 포트 |
+|---|---|---|---|
+| `frontend/` | React 18 · Vite 5 · React Router | 모바일 프레임 단일 페이지. 촬영 → 확인 → 과제 → 서류 흐름 | 5173 (dev) / 3000 (nginx) |
+| `backend/` | Java 21 · Spring Boot 3 · JPA | 회원·JWT 인증, S3 presigned 업로드, 생성 서류 영속화, AI 서비스 중계 | 8080 |
+| `ai/` | Python 3.12 · FastAPI · LangGraph | 에이전트 상태 기계, OCR 추출, 룰 엔진, RAG 질의응답, 서식 렌더 | 8000 |
+| `db` | pgvector/pgvector:pg16 | 회원·서류 테이블, LangGraph 체크포인트, `rag.chunk` 벡터 | 5432 |
+| `deploy/` | Caddy 2 | 리버스 프록시 (`/api/*` → backend, 그 외 → frontend) | 8081 |
+| `mock-institution/` | Python | 기관 API 시뮬레이터 (스켈레톤) | — |
+
+프론트는 개발 시 Vite 프록시로 `/api/v1/*` 를 Spring 에, 나머지 `/api/*` 를 AI 에 직접 보낸다.
+운영에서는 Caddy 가 `/api/*` 를 전부 backend 로 보내고 backend 가 AI 를 중계한다.
+
+## 문서
+
+| 문서 | 내용 |
 |---|---|
-| `ANTHROPIC_API_KEY` | LLM 기능이 전부 꺼진다. 질의응답도, 응답·오류의 다국어 변환도 안 되고 화면이 항상 한국어로 나온다 |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-5` |
-| `DATABASE_URL` | 벡터 검색이 죽고 BM25 단독으로 동작한다. 세션도 휘발된다 |
-| `CLOVA_INVOKE_URL` / `CLOVA_SECRET_KEY` | 신분증 OCR 불가 |
-| `RESEARCH_ENABLED` | 기본 `1`. `0` 이면 도구 루프를 끄고 단발 RAG 로 되돌린다 |
-
-**backend** (`backend/server/.env.example`)
-
-`DB_URL` · `DB_USERNAME` · `DB_PASSWORD` · `JWT_SECRET` · `JWT_ACCESS_TOKEN_TTL_SECONDS`
-· `AWS_REGION` · `AWS_S3_BUCKET` · `AI_BASE_URL` · `AI_CONNECT_TIMEOUT_SECONDS` · `AI_READ_TIMEOUT_SECONDS`
-
-**frontend** — `VITE_API_BASE_URL` (기본 `/api`), `VITE_USE_MOCK`
-
-## 에이전트 설계
-
-`ai/app/agent/graph.py` 는 **통제된 상태 기계**다. LLM 에게 자율적인 툴 선택권을 주지 않는다.
-
-```
-planner → router ─┬→ slot_filler          부족한 값 질문
-                  ├→ doc_builder → approval_gate → executor → replanner
-                  └→ explainer            설명·질의응답
-```
-
-- **경로가 파일에 고정**되어 있고, 승인 게이트를 우회하는 엣지가 존재하지 않는다.
-  L2 액션은 LLM 이 어떻게 동작하든 사용자 승인 없이 실행될 수 없다.
-- LLM 이 쓰이는 곳은 Router(의도 분류), Explainer(문장 생성), Researcher(조회 도구 루프)뿐.
-  **무엇이 가능한지는 룰이 정한다.**
-- Researcher 의 도구는 판단 재료가 아니라 **결론**을 돌려준다 — 매트릭스 원문을 넘기면
-  모델이 체류자격을 추론하게 되므로, planner 가 이미 낸 결론(`status`, `blocked_by`)만 전달한다.
-  모델은 틀린 말을 할 수는 있어도 틀린 행동은 하지 못한다.
-
-### 위험 등급
-
-| 등급 | 처리 |
-|---|---|
-| L1 | 자동 통과 |
-| L2 | 사용자 승인 필요 — 승인 UI 를 띄우고 턴 종료 |
-| L3 | 법적으로 대행 불가 — 실행하지 않고 안내만 (예: 금융실명법 제3조) |
-
-### 룰
-
-| 파일 | 내용 |
-|---|---|
-| `ai/rules/visa_matrix.yaml` | 체류자격별 가능 액션 · 선행조건 · 기한 · 지참서류 · 제출처 · 위험등급 |
-| `ai/rules/visa_codes.yaml` | 유효 체류자격 코드 (D-2, D-4, D-8, D-10, E-7, E-9, F-2, F-4, F-5, F-6, H-2) |
-| `ai/rules/evidence.yaml` | 근거 법령 조문 — 안내마다 인용된다 |
-| `ai/mappings/*.yaml` | 서식 필드 매핑 (통합신청서, 계좌개설 신청서) |
-
-액션: `alien_registration` · `mobile_subscription` · `open_bank_account` · `residence_change` · `work_activity`.
-현재 매트릭스에 상세 정의가 채워진 자격은 **D-2(유학) · E-9(비전문취업)** 이다.
-
-같은 액션이라도 자격에 따라 결론이 달라진다. E-9 의 `work_activity` 는
-`allowed: false` 다 — 고용허가제는 허가받은 사업장에서만 일하는 제도라 D-2 의
-시간제취업에 해당하는 것이 없고, 사업장을 옮기는 일은 고용센터(사업장 변경
-신청)와 출입국(근무처 변경허가)을 거치는 별개의 절차다. 그 액션은 아직 없다.
-
-`org_kind` 는 `org_name` 이 통합신청서의 어느 칸인지를 정한다(`school`/`workplace`).
-사용자에게는 소속 기관을 한 번만 묻지만, 서식에는 학교 칸과 근무처 칸이 따로 있다.
-
-### 선행조건과 완료는 다른 질문이다
-
-`satisfied_if` 는 "이 값이 프로필에 있으면 현실에서는 이미 끝난 일" 이라는 뜻이다.
-외국인등록번호가 그렇다 — 등록을 마쳐야 나오는 번호이므로, 가지고 있다는 사실
-자체가 등록을 마쳤다는 증거다. planner 는 이것을 두 집합으로 나눠 쓴다.
-
-| 집합 | 답하는 질문 | 채우는 주체 |
-|---|---|---|
-| `prereq_satisfied` | 현실에서 이미 끝난 일인가 → 뒤따르는 과제를 연다 | `satisfied_if` · executor |
-| `completed` | 앱이 서류를 만들어 승인까지 받았나 → `done` 으로 표시한다 | executor (서류가 있는 과제) |
-
-둘을 겸하게 두면 등록증을 이미 가진 사람이 계좌를 열려고 할 때 필요도 없는
-통합신청서부터 만들어야 한다. 은행이 묻는 것은 등록된 사람인지이지, 이 앱으로
-통합신청서를 만들었는지가 아니다.
-
-## 검색 (RAG)
-
-두 코퍼스를 함께 검색하고, 검색된 근거 안에서만 LLM 이 답한다.
-
-| 코퍼스 | 무엇 | 개수 |
-|---|---|---|
-| `ai/rules/corpus.json` | 법령 조문 (출입국관리법·시행령·금융실명법·특정금융정보법) | 397 |
-| `ai/rules/manual.json` | 외국인체류 안내매뉴얼 (법무부, 2026. 8.) | 1,212 |
-
-어느 판을 근거로 답하는지는 `ai/rules/sources.yaml` 이 선언한다 — 아래 "자료 최신성" 절 참고.
-
-- 영문 질의는 먼저 **문서에 실제로 쓰인 낱말로** 옮긴다 (`part-time job` → `시간제취업 체류자격 외 활동`).
-- BM25(한글 음절 바이그램) + pgvector 코사인을 RRF 로 합친다. DB 가 없으면 BM25 단독.
-- 사용자 체류자격과 일치하는 매뉴얼 조각에 ×1.6, 다른 자격 전용에 ×0.45 가중치.
-- 임베딩은 이미지 빌드 때 미리 계산해 굽는다. 컨테이너 기동은 upsert 만 하고 몇 초에 끝난다.
-- 상태는 `/health` 의 `rag` 에 나온다. `ready: false` 면 벡터 검색이 죽어 있다는 뜻이고,
-  프로덕션 배포는 이 값이 true 여야 통과한다.
-
-코퍼스 구축·매뉴얼 파싱·검색 평가는 [ai/README.md](ai/README.md) 에 자세히 있다.
-
-> 안내매뉴얼 원본 PDF(15MB)는 리포에 없다. [하이코리아](https://www.hikorea.go.kr) 자료실에서
-> 받아 `ai/corpus/manual/` 에 두고 `build_manual.py` 를 돌린다. 결과물 `rules/manual.json` 은
-> 커밋되어 있으므로 코퍼스를 다시 만들 때만 원본이 필요하다.
-
-## 자료 최신성
-
-법령은 개정되고 매뉴얼은 판이 바뀌고 서식은 칸이 바뀐다. 무엇을 근거로 답하고
-있는지가 `ai/rules/sources.yaml` 한 곳에 선언되어 있다. 예전에는 이 정보가 법령
-PDF 파일명, `build_manual.py` 의 문자열 상수, 템플릿 HTML 안의 문구 세 군데에
-흩어져 있었고 아무도 읽지 않았다.
-
-두 날짜를 구분한다.
-
-| | 뜻 | 언제 바뀌나 |
-|---|---|---|
-| `version` | 그 자료 자체의 판·시행일 | 원본이 개정되어야 |
-| `last_verified` | 최신인지 우리가 마지막으로 확인한 날 | 확인만 해도 (판이 그대로여도) |
-
-**오래된 판이 곧 문제는 아니다** — 개정이 없었으면 3년 전 서식이 여전히 최신이다.
-문제는 확인한 지 오래된 것이다. 그래서 알림은 `version` 이 아니라 `last_verified`
-를 기준으로 울린다.
-
-```bash
-cd ai && uv run python scripts/check_sources.py
-```
-
-두 가지를 본다. **정합성** — 선언한 판이 실제 파일과 맞는가(법령 PDF 파일명의
-시행일, `build_manual.py` 의 상수, 템플릿의 개정일). 어긋났다면 원본만 갈아끼우고
-선언을 안 고친 것이다. **노후도** — `recheck_after_days` 가 지났는가.
-
-`.github/workflows/check-sources.yml` 이 매일 09:00 KST 에 돌려 `source-freshness`
-라벨의 이슈 하나를 열고 갱신한다. 매일 새로 만들지 않는다 — 쌓이면 아무도 안 본다.
-통과하면 자동으로 닫는다.
-
-**자동으로 고치지 않는다.** 서식이 바뀌면 템플릿뿐 아니라 `mappings/*.yaml` 의 필드
-매핑과 `visa_matrix.yaml` 의 `required_docs` 까지 함께 손봐야 하고, 매뉴얼 판이
-바뀌면 `build_manual.py` 의 장 경계 탐지가 깨질 수 있다. 감지는 기계가, 반영은
-사람이 한다.
-
-> 아직 네트워크를 쓰지 않는다. 원본이 실제로 개정됐는지 확인하려면 국가법령정보센터
-> OPEN API 키(OC)가 필요하다. 지금은 "확인한 지 오래됐으니 사람이 보라" 까지만 한다.
-
-떠 있는 컨테이너가 어느 판을 들고 있는지는 `/health` 의 `sources` 에 나온다.
-
-## 서류 생성
-
-`ai/app/nodes/doc_builder.py` — **LLM 을 쓰지 않는다.** 값 생성은 전부 결정적 매핑이다.
-
-```
-profile + mappings/*.yaml → Jinja2 (templates/*.html) → WeasyPrint → PDF
-```
-
-- 렌더에는 마스킹하지 않은 평문 프로필을 쓴다 (서버 내부에서만 생성).
-  마스킹은 **응답을 만들 때만** 적용되고 state 원본은 항상 평문이다.
-  그래서 무엇을 얼마나 들고 있는지가 중요하다 — 아래 "개인정보" 절 참고.
-- OCR 신뢰도 0.95 미만 필드는 서류와 화면 양쪽에 '확인요망'으로 표시된다.
-- WeasyPrint 는 Pango/cairo 를 dlopen 한다. 시스템 라이브러리가 없으면 PDF 생성이
-  조용히 실패하고 HTML 만 남는다 (`ai/Dockerfile` 참고).
-
-## 개인정보
-
-무엇을 들고 있고 언제 버리는지.
-
-| 데이터 | 어디에 | 언제 사라지나 |
-|---|---|---|
-| 신분증 원본 사진 | S3 `members/{id}/uploads/` | **OCR 직후 즉시 삭제** (`FileService.discardOriginal`) |
-| OCR 원문 | — | **저장하지 않는다.** 추출 함수 밖으로 나가지 않는다 |
-| 프로필 · 대화 | 체크포인터 (Postgres) | 보관기간 스크립트로 정리 (아래) |
-| 생성 서류 PDF | S3 `members/{id}/generated-documents/` | 남는다 — 서류함은 회원 자산이다 |
-| 임시 렌더 결과 | `ai/output/*.html`, `*.pdf` | 아직 정리하지 않는다 |
-
-- **응답에 예외 메시지를 싣지 않는다.** OCR·프로필 처리 중 난 예외에는 신분증에서
-  읽은 값이 섞일 수 있다. 클라이언트에는 예외 **타입만** 나가고, 원인은 서버
-  로그의 traceback 에만 남는다.
-- 외국인등록번호는 응답에서 마스킹된다(`990101-*******`). state 원본은 평문이므로
-  저장 매체 암호화가 따로 필요하다 — `deploy/aws-hardening.md`.
-
-```bash
-uv run python scripts/purge_stale_sessions.py                # 30일 이상 방치된 세션
-uv run python scripts/purge_raw_texts.py                     # 옛 체크포인트의 OCR 원문 (1회)
-```
-
-둘 다 기본이 dry-run 이다. `--apply` 를 붙여야 실제로 지운다.
-
-세션 보관기간은 **마지막 활동 기준 30일**이다. 생성 기준이 아니라 활동 기준인
-이유는, 90일 기한을 추적하는 앱에서 나이만으로 지우면 계속 쓰는 사람의 D-day 가
-매번 리셋되기 때문이다.
-
-AWS 쪽에서 해야 하는 것(버킷 기본 암호화, 퍼블릭 차단, EBS 암호화)은
-[deploy/aws-hardening.md](deploy/aws-hardening.md) 에 모아 두었다.
-
-## 주요 엔드포인트
-
-**AI** (`ai/app/main.py`)
-
-| 메서드 | 경로 | |
-|---|---|---|
-| GET | `/health` | `persistent`, `rag`, `sources`(근거 자료 판) 포함 |
-| POST | `/api/session` | 세션 생성·이어받기·리셋 |
-| POST | `/api/profile/extract-upload` | 신분증 업로드 → OCR → 프로필 |
-| POST | `/api/profile/confirm` | 확인 화면에서 고친 값 반영 |
-| POST | `/api/chat` · `/api/chat/stream` | 대화 (스트림은 SSE 로 진행 단계 전송) |
-| POST | `/api/actions/{id}/start` · `/preview` · `/approve` | 액션 시작 · 서류 생성 · 승인 |
-| GET | `/api/state` · `/api/ledger` | 새로고침 복원 · 처리 이력 |
-| GET | `/api/documents/{id}/preview` · `/api/documents/{id}.pdf` | 생성 서류 |
-
-**Backend**
-
-| 메서드 | 경로 | |
-|---|---|---|
-| POST | `/api/v1/auth/signup` · `/api/v1/auth/login` | JWT 발급 |
-| POST | `/api/v1/uploads` | S3 presigned PUT URL |
-| POST | `/api/v1/documents/extractions` | `uploadId` 로 OCR 중계 |
-| POST | `/api/session` · `/api/chat` · `/api/chat/stream` · `/api/actions/{id}/start` | AI 중계 |
-| POST | `/api/actions/{id}/preview` · `/api/actions/{id}/approve` | 서류 생성 후 영속화 |
-| GET | `/api/ledger` · `/api/documents/{id}/preview` · `/api/documents/{id}/download` | |
-
-모든 에이전트 응답은 `{ schema_version, reply, ui, state }` 봉투다.
-오류는 `{ detail: { error, message, details } }`.
-계약은 `ai/app/api/schemas.py` 에 있고 **필드 추가만 허용, 삭제·개명 금지**다.
-
-## 테스트
-
-```bash
-cd ai && uv run pytest
-```
-
-```bash
-cd backend/server && ./gradlew test
-```
-
-검색이 정상인지 확인:
-
-```bash
-cd ai && DATABASE_URL=postgresql://settle:settle@localhost:5432/settle uv run python eval/retrieval_check.py
-```
-
-정답 문서를 하나로 특정하기는 어려우므로, 무너지면 반드시 깨지는 것만 본다 —
-내 자격 문서가 남의 자격 문서에 밀리지 않는가.
-
-## 디렉터리
-
-```
-ai/
-  app/agent/       LangGraph 상태 기계 (graph · service · state)
-  app/nodes/       planner · profiler · doc_builder · qa · researcher
-  app/extractors/  외국인등록증 · 여권 OCR (CLOVA)
-  app/tools/       llm · embed · rag_store · progress
-  rules/           체류자격 매트릭스 · 근거법령 · 코퍼스
-  mappings/        서식 필드 매핑
-  templates/       서식 HTML
-  scripts/         코퍼스 구축 · 임베딩 · 적재 · 보관기간 정리 · 자료 최신성 점검
-backend/server/    Spring Boot — domain: auth · member · file · document · agent · action · profile · card · application
-frontend/frontend-react/
-                   React + Vite (App.jsx 단일 스텝 라우팅)
-deploy/            Caddyfile · 배포 스크립트 · IAM·CORS 정책 · AWS 보안 설정 안내
-mock-institution/  기관 API 시뮬레이터
-seed/              샘플 신분증 이미지 · 프로필
-```
-
-## CI/CD
-
-- **CI** (`.github/workflows/ci-cd.yml`) — `develop`·`master` 대상 PR 에서 실행.
-  변경된 서비스만 빌드하고, AI 는 `pytest` 를 돌린 뒤 컨테이너를 띄워 `/health`
-  스모크 테스트까지 한다. `CodeRabbit` 이 같은 PR 에 리뷰를 단다(`.coderabbit.yaml`).
-- **브랜치 정책** — `master` 로는 동일 저장소의 `develop` 브랜치만 PR 을 보낼 수 있다.
-  기본 작업 브랜치는 `develop`, `master` 는 릴리스 브랜치다.
-- **CD** (`cd-production.yml`) — `master` push 시 이미지 3개를 GHCR 에 올리고,
-  SSM 으로 EC2 에 `compose.selfhost.yml`·`Caddyfile`·`deploy/remote-deploy.sh` 를
-  실어 보내 pull·기동시킨다. 인스턴스에서 빌드하지 않는다.
-  배포 검증은 인스턴스 내부와 **공인 DNS 양쪽**에서 한다 — 내부 `--resolve` 만으로는
-  외부 접속을 증명하지 못한다.
-- **롤백** — `workflow_dispatch` 에 이전 커밋 SHA 를 `image_tag` 로 넣으면
-  빌드를 건너뛰고 그 이미지로 되돌린다.
-
-배포 인프라는 EC2 한 대다. Postgres(pgvector)도 같은 박스의 컨테이너로 돌고,
-매니지드 의존은 S3 하나뿐이다. 자세한 것은 `compose.selfhost.yml` 주석 참고.
-
-Postgres 가 EC2 위의 컨테이너이므로 저장 암호화는 RDS 설정이 아니라 **EBS 볼륨
-암호화**다. 기존 볼륨에는 제자리 적용이 안 되고 스냅샷 교체가 필요하다 —
-절차와 남은 항목은 [deploy/aws-hardening.md](deploy/aws-hardening.md) 에 있다.
+| [에이전트 설계](docs/agent.md) | 상태 기계 · 위험 등급 · 룰 · 선행조건과 완료 |
+| [검색과 근거 자료](docs/rag.md) | RAG 코퍼스 · 하이브리드 검색 · 자료 최신성 |
+| [서류 생성과 개인정보](docs/documents-and-privacy.md) | PDF 렌더 · 데이터 보관과 삭제 |
+| [API](docs/api.md) | AI · Backend 주요 엔드포인트 |
+| [개발 가이드](docs/development.md) | 환경 변수 · 테스트 · 디렉터리 구조 |
+| [배포 · CI/CD](docs/deployment.md) | CI · CD · 롤백 · 인프라 |
